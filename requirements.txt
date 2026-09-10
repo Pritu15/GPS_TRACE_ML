@@ -1,0 +1,23 @@
+# Core data / ML
+pandas==2.2.3
+numpy==2.1.1
+scikit-learn==1.7.1
+xgboost==3.2.0
+joblib==1.5.2
+
+# HTTP (OSM trace API, OSRM routing engine)
+requests==2.34.2
+
+# Excel I/O (route_legs.xlsx)
+openpyxl==3.1.5
+
+# Jupyter (run/edit the notebooks)
+notebook==7.6.2
+ipykernel==6.29.5
+ipython==8.26.0
+nbformat==5.10.4
+nbconvert==7.17.1
+
+# Routing Codes/plot_pickup_requests.ipynb (map display + interactive widgets)
+folium==0.20.0
+ipywidgets==8.1.3
