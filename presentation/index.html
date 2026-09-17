@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dhaka Travel-Time Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#F2F1EA; --surface:#FFFFFF; --surface-2:#E9E5D8;
+    --ink:#1C2624; --ink-muted:#5B655F; --border:#D7D2C2;
+    --accent:#C1650A; --accent-ink:#FFFFFF; --accent-soft:#F3DCBE;
+    --teal:#0E7A72; --teal-soft:#CFE7E3;
+    --bad:#B23A2E; --bad-soft:#F4D9D3;
+    --shadow: 0 1px 0 rgba(28,38,36,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#11181A; --surface:#171F21; --surface-2:#1E2729;
+      --ink:#EAE7DD; --ink-muted:#93A19B; --border:#2B3638;
+      --accent:#EFA24A; --accent-ink:#12181A; --accent-soft:#3A2C19;
+      --teal:#34C7BB; --teal-soft:#1B3937;
+      --bad:#E37A6D; --bad-soft:#3B2320;
+      --shadow: 0 1px 0 rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#11181A; --surface:#171F21; --surface-2:#1E2729;
+    --ink:#EAE7DD; --ink-muted:#93A19B; --border:#2B3638;
+    --accent:#EFA24A; --accent-ink:#12181A; --accent-soft:#3A2C19;
+    --teal:#34C7BB; --teal-soft:#1B3937;
+    --bad:#E37A6D; --bad-soft:#3B2320;
+    --shadow: 0 1px 0 rgba(0,0,0,.3);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size:16px; line-height:1.5;
+  }
+  .mono{ font-family:"IBM Plex Mono", ui-monospace, monospace; }
+  h1,h2,h3{ font-family:"Barlow Condensed", ui-sans-serif, sans-serif; font-weight:700; text-wrap:balance; margin:0; }
+  a{ color:var(--teal); }
+
+  #deck{ position:relative; }
+  .slide{
+    display:none;
+    min-height:100dvh;
+    padding:6.5vh 7vw 9vh;
+    flex-direction:column;
+    gap:1.6rem;
+  }
+  .slide.active{ display:flex; }
+
+  .eyebrow{
+    display:flex; align-items:baseline; gap:.6rem;
+    font-family:"IBM Plex Mono"; font-size:.8rem; letter-spacing:.08em;
+    color:var(--ink-muted); text-transform:uppercase;
+  }
+  .eyebrow .num{ color:var(--accent); font-weight:600; }
+  .eyebrow .rule{ flex:1; height:1px; background:var(--border); }
+
+  .slide h2{ font-size:clamp(2.1rem, 4.4vw, 3.4rem); line-height:1.05; }
+  .slide .sub{ color:var(--ink-muted); font-size:1.05rem; max-width:60ch; }
+
+  .body{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:1.4rem; min-height:0; }
+  .grid-2{ display:grid; grid-template-columns:1.1fr 1fr; gap:2.2rem; align-items:stretch; }
+  .grid-2.rev{ grid-template-columns:1fr 1.1fr; }
+  @media (max-width:900px){ .grid-2, .grid-2.rev{ grid-template-columns:1fr; } }
+
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:1.3rem 1.5rem; box-shadow:var(--shadow);
+  }
+  .card h4{ font-family:"Barlow Condensed"; font-size:1.15rem; font-weight:600; margin:0 0 .5rem; letter-spacing:.01em; }
+  .card p{ margin:0; color:var(--ink-muted); font-size:.94rem; }
+
+  ul.list{ margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:.55rem; }
+  ul.list li{ display:flex; gap:.65rem; align-items:baseline; font-size:.98rem; }
+  ul.list li::before{ content:"›"; color:var(--accent); font-weight:700; flex:none; }
+
+  table{ width:100%; border-collapse:collapse; font-size:.92rem; }
+  th,td{ text-align:left; padding:.5rem .6rem; border-bottom:1px solid var(--border); }
+  th{ font-family:"IBM Plex Mono"; font-size:.72rem; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-muted); font-weight:500; }
+  td.num, th.num{ text-align:right; font-variant-numeric:tabular-nums; }
+  td.mono{ font-family:"IBM Plex Mono"; font-size:.85rem; color:var(--teal); }
+  tr.win td{ color:var(--ink); font-weight:600; }
+  tr.win{ background:var(--accent-soft); }
+  .tablewrap{ overflow-x:auto; border-radius:10px; border:1px solid var(--border); background:var(--surface); }
+  .tablewrap table{ min-width:520px; }
+  .tablewrap th, .tablewrap td{ padding:.65rem .9rem; }
+
+  /* bar list chart */
+  .bars{ display:flex; flex-direction:column; gap:.85rem; }
+  .bar-row{ display:grid; grid-template-columns:9.5rem 1fr 4.2rem; align-items:center; gap:.7rem; }
+  .bar-row .lbl{ font-size:.86rem; color:var(--ink-muted); text-align:right; }
+  .bar-row .lbl b{ color:var(--ink); font-weight:600; }
+  .track{ height:1.55rem; background:var(--surface-2); border-radius:5px; position:relative; overflow:hidden; }
+  .fill{ height:100%; border-radius:5px; }
+  .fill.accent{ background:var(--accent); }
+  .fill.teal{ background:var(--teal); }
+  .fill.muted{ background:var(--ink-muted); opacity:.55; }
+  .fill.bad{ background:var(--bad); }
+  .bar-row .val{ font-family:"IBM Plex Mono"; font-size:.86rem; font-variant-numeric:tabular-nums; }
+
+  .legend{ display:flex; gap:1.4rem; flex-wrap:wrap; font-size:.82rem; color:var(--ink-muted); }
+  .legend span{ display:inline-flex; align-items:center; gap:.4rem; }
+  .swatch{ width:.7rem; height:.7rem; border-radius:2px; display:inline-block; }
+
+  /* pipeline diagram */
+  .pipeline{ display:flex; align-items:stretch; gap:0; flex-wrap:wrap; }
+  .pstep{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:.9rem 1rem; min-width:9.5rem; flex:1;
+    display:flex; flex-direction:column; gap:.3rem; box-shadow:var(--shadow);
+  }
+  .pstep .n{ font-family:"IBM Plex Mono"; font-size:.72rem; color:var(--accent); }
+  .pstep .t{ font-family:"Barlow Condensed"; font-weight:600; font-size:1.05rem; }
+  .pstep .d{ font-size:.78rem; color:var(--ink-muted); }
+  .parrow{ display:flex; align-items:center; justify-content:center; width:2rem; color:var(--ink-muted); font-size:1.2rem; flex:none; }
+  @media (max-width:900px){ .parrow{ width:100%; transform:rotate(90deg); padding:.2rem 0; } .pipeline{ flex-direction:column; } }
+
+  .stat-row{ display:flex; gap:1.1rem; flex-wrap:wrap; }
+  .stat{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:.9rem 1.2rem; flex:1; min-width:9rem; box-shadow:var(--shadow); }
+  .stat .v{ font-family:"Barlow Condensed"; font-size:2.1rem; font-weight:700; color:var(--accent); line-height:1; }
+  .stat .k{ font-size:.78rem; color:var(--ink-muted); margin-top:.25rem; }
+
+  .tag{ display:inline-block; font-family:"IBM Plex Mono"; font-size:.72rem; padding:.15rem .5rem; border-radius:4px; background:var(--teal-soft); color:var(--teal); }
+  .tag.bad{ background:var(--bad-soft); color:var(--bad); }
+
+  .foot{ display:flex; justify-content:space-between; align-items:center; font-size:.78rem; color:var(--ink-muted); font-family:"IBM Plex Mono"; }
+
+  /* title slide */
+  #s1{ justify-content:center; align-items:flex-start; }
+  #s1 .kicker{ font-family:"IBM Plex Mono"; letter-spacing:.12em; text-transform:uppercase; color:var(--teal); font-size:.9rem; }
+  #s1 h1{ font-size:clamp(2.6rem,7vw,5.2rem); line-height:.98; margin-top:.5rem; }
+  #s1 .lede{ color:var(--ink-muted); font-size:1.25rem; max-width:52ch; margin-top:1rem; }
+  #s1 .route-motif{ position:absolute; right:6vw; top:10vh; width:min(30vw,320px); opacity:.9; }
+  #s1 .byline{ margin-top:auto; padding-top:2rem; display:flex; gap:2rem; flex-wrap:wrap; font-family:"IBM Plex Mono"; font-size:.85rem; color:var(--ink-muted); }
+  #s1 .byline b{ color:var(--ink); font-weight:600; }
+
+  /* nav */
+  #navbar{
+    position:fixed; left:0; right:0; bottom:0; height:3px; background:var(--border); z-index:20;
+  }
+  #navbar .prog{ height:100%; background:var(--accent); width:0%; transition:width .25s ease; }
+  .navctl{
+    position:fixed; bottom:1.1rem; right:1.4rem; z-index:20;
+    display:flex; align-items:center; gap:.7rem;
+    font-family:"IBM Plex Mono"; font-size:.78rem; color:var(--ink-muted);
+  }
+  .navctl button{
+    width:2.1rem; height:2.1rem; border-radius:50%; border:1px solid var(--border);
+    background:var(--surface); color:var(--ink); cursor:pointer; font-size:1rem;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .navctl button:hover{ border-color:var(--accent); color:var(--accent); }
+  .navctl button:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .counter{ min-width:3.6rem; text-align:center; font-variant-numeric:tabular-nums; }
+
+  @media print{
+    .navctl, #navbar{ display:none !important; }
+    .slide{ display:flex !important; page-break-after:always; min-height:100vh; }
+  }
+</style>
+</head>
+<body>
+
+<div id="deck">
+
+  <!-- 1. TITLE -->
+  <section class="slide active" id="s1">
+    <div class="kicker">BUET · CSE Capstone Project</div>
+    <h1>Predicting Travel Time<br>Across Dhaka</h1>
+    <p class="lede">A machine-learning model that takes a source, a destination, and the current time — and returns how long the trip will actually take, trained on real GPS traces of Dhaka traffic.</p>
+    <svg class="route-motif" viewBox="0 0 300 220" fill="none" aria-hidden="true">
+      <path d="M20 190 C 80 190, 60 90, 130 90 S 220 40, 270 40" stroke="var(--teal)" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round"/>
+      <circle cx="20" cy="190" r="7" fill="var(--ink-muted)"/>
+      <circle cx="270" cy="40" r="9" fill="var(--accent)"/>
+      <path d="M270 40 l-9 -16 h18 z" fill="var(--accent)" transform="rotate(20 270 40)"/>
+    </svg>
+    <div class="byline">
+      <span><b>GPS Trace ML</b></span>
+      <span>Dept. of CSE, BUET</span>
+      <span>Student ID <b>2105109</b></span>
+    </div>
+  </section>
+
+  <!-- 2. THE PROBLEM -->
+  <section class="slide" id="s2">
+    <div class="eyebrow"><span class="num">01</span><span>The Problem</span><span class="rule"></span></div>
+    <h2>One query, one number: minutes to get there</h2>
+    <div class="body grid-2">
+      <div class="card" style="display:flex;flex-direction:column;justify-content:center;">
+        <h4>Input → Output</h4>
+        <div class="mono" style="font-size:1.1rem;line-height:2;">
+          src&nbsp;=&nbsp;(lat, lon)<br>
+          dst&nbsp;=&nbsp;(lat, lon)<br>
+          time&nbsp;=&nbsp;now<br>
+          <span style="color:var(--ink-muted)">──────────────</span><br>
+          <b style="color:var(--accent)">duration = f(src, dst, time)</b>
+        </div>
+      </div>
+      <div class="card">
+        <h4>Why it matters</h4>
+        <ul class="list">
+          <li>Dhaka traffic varies wildly by hour, day, and route — a fixed "average speed" estimate is unusable.</li>
+          <li>Ride-hailing ETAs, delivery windows, and shuttle scheduling all need a trustworthy travel-time number, not just a map distance.</li>
+          <li>Deployed and tested on a real 135-leg shuttle route sheet for a live use case (see Slide 13).</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. RAW DATA -->
+  <section class="slide" id="s3">
+    <div class="eyebrow"><span class="num">02</span><span>Raw Data</span><span class="rule"></span></div>
+    <h2>GPS traces of real vehicles moving through Dhaka</h2>
+    <div class="body">
+      <div class="stat-row">
+        <div class="stat"><div class="v">89</div><div class="k">distinct GPS traces used</div></div>
+        <div class="stat"><div class="v">270</div><div class="k">OSM trace-API pages downloaded</div></div>
+        <div class="stat"><div class="v">0.25°²</div><div class="k">max bbox area per API call</div></div>
+        <div class="stat"><div class="v">304</div><div class="k">clean trips survive to training</div></div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <h4>Source: OpenStreetMap public GPS traces</h4>
+          <p>Each trace is a GPX/XML file: an ordered list of <span class="mono">(lat, lon, timestamp)</span> points recorded by a real device travelling through the city. Started with 2 files — clearly not enough — so the full public Dhaka trace archive was downloaded systematically, tiling the city into sub-0.25° boxes to respect the API's per-request area limit, then paging through every box.</p>
+        </div>
+        <div class="card">
+          <h4>What one point looks like</h4>
+<pre class="mono" style="margin:0;font-size:.8rem;white-space:pre-wrap;">&lt;trkpt lat="23.7509" lon="90.3935"&gt;
+  &lt;time&gt;2024-11-02T08:14:31Z&lt;/time&gt;
+&lt;/trkpt&gt;</pre>
+          <p style="margin-top:.7rem;">Raw points only — no speed, no road, no trip boundary. All of that has to be derived (next slide).</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. PIPELINE -->
+  <section class="slide" id="s4">
+    <div class="eyebrow"><span class="num">03</span><span>From Traces to Dataset</span><span class="rule"></span></div>
+    <h2>Turning raw traces into (src, dst, duration) rows</h2>
+    <div class="body" style="justify-content:flex-start;gap:1.1rem;">
+      <div class="pipeline">
+        <div class="pstep"><div class="n">01</div><div class="t">Parse + split</div><div class="d">Split a trace wherever the time gap &gt; 600s (separate trips merged in one file).</div></div>
+        <div class="parrow">→</div>
+        <div class="pstep"><div class="n">02</div><div class="t">Clean glitches</div><div class="d">Split on implied speed &gt; 120 km/h; keep only trips ≥5 pts, ≥300 m, ≥60 s.</div></div>
+        <div class="parrow">→</div>
+        <div class="pstep"><div class="n">03</div><div class="t">Multi-scale sampling</div><div class="d">From each trip, sample (src,dst) pairs at 0.3 / 1 / 3 / 8 km + full endpoint — one trip yields many training rows at different distances.</div></div>
+        <div class="parrow">→</div>
+        <div class="pstep"><div class="n">04</div><div class="t">Route + feature build</div><div class="d">Query OSRM for real road distance/duration; compute haversine, bearing, zone, time features.</div></div>
+        <div class="parrow">→</div>
+        <div class="pstep"><div class="n">05</div><div class="t">QC filter</div><div class="d">Drop impossible rows: road speed &gt;100 km/h, or OSRM route shorter than straight-line (bad snap).</div></div>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Stage</th><th class="num">Rows</th><th>Note</th></tr></thead>
+          <tbody>
+            <tr><td>Sub-trajectory pairs sampled</td><td class="num mono">9,131</td><td>before routing/QC</td></tr>
+            <tr><td>Dropped — implied road speed &gt; 100 km/h</td><td class="num mono">−298</td><td>GPS/OSRM artifacts</td></tr>
+            <tr><td>Dropped — OSRM route shorter than straight line</td><td class="num mono">−63</td><td>road-snap glitch</td></tr>
+            <tr class="win"><td><b>Final training dataset</b></td><td class="num mono"><b>8,765</b></td><td><b>304 distinct trips</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. FEATURES: SPATIAL & ROUTING -->
+  <section class="slide" id="s5">
+    <div class="eyebrow"><span class="num">04</span><span>Features · Spatial &amp; Routing</span><span class="rule"></span></div>
+    <h2>What the model actually sees — part 1</h2>
+    <div class="body">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Feature</th><th>How it's computed</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">haversine_distance_km</td><td>Great-circle straight-line distance between src and dst.</td></tr>
+            <tr><td class="mono">bearing_degrees</td><td>Compass direction from src to dst (0–360°).</td></tr>
+            <tr><td class="mono">osrm_route_distance_km</td><td>Real road-network distance from a self-hosted OSRM engine (Docker, MLD algorithm, built from the Bangladesh OSM extract).</td></tr>
+            <tr><td class="mono">osrm_free_flow_duration_sec</td><td>OSRM's own no-traffic travel-time estimate for that road route.</td></tr>
+            <tr><td class="mono">route_directness_ratio</td><td>haversine ÷ osrm_route_distance — how winding the real road path is vs. a straight line.</td></tr>
+            <tr><td class="mono">src_zone_id / dst_zone_id / od_zone_pair_id</td><td>Which cell of the fixed 20-cell city grid src/dst fall in (Slide 8).</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="sub">Raw lat/lon are used to <i>compute</i> all of these — never fed to the model directly (Slide 7).</p>
+    </div>
+  </section>
+
+  <!-- 6. FEATURES: TEMPORAL & HISTORICAL -->
+  <section class="slide" id="s6">
+    <div class="eyebrow"><span class="num">04</span><span>Features · Temporal &amp; Historical</span><span class="rule"></span></div>
+    <h2>What the model actually sees — part 2</h2>
+    <div class="body">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Feature</th><th>How it's computed</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">hour_sin / hour_cos</td><td>Cyclical encoding of time-of-day (so 23:59 and 00:01 sit next to each other, not far apart).</td></tr>
+            <tr><td class="mono">traffic_period_bucket</td><td>Discrete bucket — night / morning_offpeak / morning_rush / midday / evening_rush / evening_winddown — instead of raw hour. Adopted from a teammate's suggestion; validated to help the tree models split on real traffic regimes rather than noisy exact minutes.</td></tr>
+            <tr><td class="mono">day_of_week, is_friday, is_saturday, is_weekend</td><td>Bangladesh weekend is Friday+Saturday, not Sat/Sun — encoded explicitly.</td></tr>
+            <tr><td class="mono">is_holiday</td><td>Fixed-date national holidays only (lunar Islamic holidays shift yearly — known limitation, Slide 12).</td></tr>
+            <tr><td class="mono">rush_hour_flag</td><td>1 if 8–10am or 5–9pm.</td></tr>
+            <tr><td class="mono">historical_avg_speed_kmh</td><td>Looked up from training data: mean real speed for this OD-zone-pair at this time bucket → falls back to zone-pair only → time-bucket only → global mean, whichever has enough support. Recomputed per CV fold to avoid leakage.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="sub">Target: <span class="mono">duration_seconds</span>, trained in log-space (<span class="mono">log_duration</span>) and exponentiated back for reporting.</p>
+    </div>
+  </section>
+
+  <!-- 7. WHY NOT LAT/LON -->
+  <section class="slide" id="s7">
+    <div class="eyebrow"><span class="num">05</span><span>Design Choice</span><span class="rule"></span></div>
+    <h2>Why not just feed the model raw lat/lon?</h2>
+    <div class="body grid-2 rev">
+      <div class="card">
+        <h4>The trap</h4>
+        <p>A tree model given raw coordinates learns to split on exact latitude/longitude thresholds it saw in training. A brand-new src/dst pair a few hundred meters from anything seen before gets no meaningful split — the model has no notion of "nearby."</p>
+      </div>
+      <div class="card">
+        <h4>What we do instead</h4>
+        <ul class="list">
+          <li>Lat/lon are used only as <i>inputs to formulas</i> — distance, bearing, and which fixed zone a point falls in.</li>
+          <li>The model is trained on the <span class="mono">zone id</span> / <span class="mono">od_zone_pair_id</span> categories, plus continuous distance and route features — quantities that generalize to any new coordinate, because every coordinate maps into one of the 20 zones.</li>
+          <li>This is exactly what makes inference on a never-seen-before src/dst pair possible (Slide 13).</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. WHY 20 FIXED ZONES -->
+  <section class="slide" id="s8">
+    <div class="eyebrow"><span class="num">06</span><span>Zoning</span><span class="rule"></span></div>
+    <h2>Why a fixed 4×5 grid, not data-driven clusters?</h2>
+    <div class="body">
+      <div class="grid-2">
+        <div class="card">
+          <h4>The problem with K-Means zones</h4>
+          <p>K-Means clusters only where GPS traces already exist. Areas the traces never visited simply have no zone — so a query touching one of those areas at inference time falls completely outside anything the model learned.</p>
+          <h4 style="margin-top:1rem;">The fix: a fixed geographic grid</h4>
+          <p>Split Dhaka's full bounding box into a uniform 4×5 grid (20 cells) <i>regardless of data density</i>. Every possible coordinate in the city — visited or not — lands in a real, defined zone.</p>
+        </div>
+        <div class="card">
+          <h4>A/B tested — identical grouped 5-fold CV</h4>
+          <div class="bars">
+            <div class="bar-row"><span class="lbl">MAE (s)</span><div class="track"><div class="fill accent" style="width:100%"></div></div><span class="val">527.1</span></div>
+            <div class="bar-row"><span class="lbl">&nbsp;</span><div class="track"><div class="fill muted" style="width:78.9%"></div></div><span class="val">658.8</span></div>
+            <div class="bar-row"><span class="lbl">RMSE (s)</span><div class="track"><div class="fill accent" style="width:100%"></div></div><span class="val">1216.9</span></div>
+            <div class="bar-row"><span class="lbl">&nbsp;</span><div class="track"><div class="fill muted" style="width:61.2%"></div></div><span class="val">1988.4</span></div>
+          </div>
+          <div class="legend" style="margin-top:.9rem;">
+            <span><span class="swatch" style="background:var(--accent)"></span>Fixed grid (adopted)</span>
+            <span><span class="swatch" style="background:var(--ink-muted);opacity:.55"></span>K-Means (previous)</span>
+          </div>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><div class="v">18/20</div><div class="k">zones actually hit by real trip data</div></div>
+        <div class="stat"><div class="v">85</div><div class="k">distinct OD zone-pairs observed</div></div>
+        <div class="stat" style="border-color:var(--teal);"><div class="v" style="color:var(--teal)">0 / 131</div><div class="k">unseen zone-pairs on a real 131-leg deployment test (was 45/131 under K-Means)</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9. GROUPED 5-FOLD CV -->
+  <section class="slide" id="s9">
+    <div class="eyebrow"><span class="num">07</span><span>Validation Strategy</span><span class="rule"></span></div>
+    <h2>Grouped 5-fold cross-validation, by trip</h2>
+    <div class="body grid-2">
+      <div class="card">
+        <h4>Why <i>grouped</i> — not plain random K-fold</h4>
+        <p>One trip produces several rows (0.3/1/3/8 km sub-samples, all sharing the same route and traffic conditions). A random split can put some of a trip's rows in train and others in validation — the model "recognizes" that trip and validation looks artificially good.</p>
+        <p style="margin-top:.6rem;"><b class="mono" style="color:var(--ink);">GroupKFold(groups=trip_id)</b> keeps every row from one trip on the same side of the split, every fold.</p>
+      </div>
+      <div class="card">
+        <h4>Why 5 folds</h4>
+        <p>Standard bias/variance trade-off: enough folds that each validation slice is large enough to trust (≈1,750 rows / ≈61 trips per fold here), without the training cost of something like 10-fold on a modest 304-trip dataset.</p>
+        <div class="bars" style="margin-top:.9rem;">
+          <div class="bar-row"><span class="lbl">Fold 1</span><div class="track"><div class="fill teal" style="width:100%"></div></div><span class="val">570.8s</span></div>
+          <div class="bar-row"><span class="lbl">Fold 2</span><div class="track"><div class="fill teal" style="width:85.9%"></div></div><span class="val">490.1s</span></div>
+          <div class="bar-row"><span class="lbl">Fold 3</span><div class="track"><div class="fill teal" style="width:93.3%"></div></div><span class="val">532.6s</span></div>
+          <div class="bar-row"><span class="lbl">Fold 4</span><div class="track"><div class="fill teal" style="width:80.4%"></div></div><span class="val">458.8s</span></div>
+          <div class="bar-row"><span class="lbl">Fold 5</span><div class="track"><div class="fill teal" style="width:98.6%"></div></div><span class="val">562.7s</span></div>
+        </div>
+        <p class="sub" style="margin-top:.6rem;">Per-fold out-of-fold MAE — reasonably stable across folds, no single fold driving the result.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10. HYPERPARAMETER SENSITIVITY -->
+  <section class="slide" id="s10">
+    <div class="eyebrow"><span class="num">08</span><span>Hyperparameter Sensitivity</span><span class="rule"></span></div>
+    <h2>What happens if you change these knobs?</h2>
+    <div class="body">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Knob</th><th>Turn it down</th><th>Turn it up</th></tr></thead>
+          <tbody>
+            <tr><td><b>Grid size</b><br><span class="sub mono" style="font-size:.78rem;">currently 4×5 = 20 cells</span></td>
+                <td>Fewer, bigger zones → more data per zone (robust averages) but coarser location signal → higher error inside each zone.</td>
+                <td>More, smaller zones (e.g. 10×10) → sharper spatial signal, but zones get sparse fast → historical lookups fall back to coarser tiers more often, and more zones go completely unvisited.</td></tr>
+            <tr><td><b>CV folds (k)</b><br><span class="sub mono" style="font-size:.78rem;">currently 5</span></td>
+                <td>k=3 → faster, but each validation slice is bigger relative to train, and the performance estimate gets noisier.</td>
+                <td>k=10 → more stable estimate, but 2× the model fits for a 304-trip dataset — diminishing returns here.</td></tr>
+            <tr><td><b>min_support</b><br><span class="sub mono" style="font-size:.78rem;">min trips before trusting a historical average</span></td>
+                <td>Lower → uses averages backed by only 1–2 trips → noisy, overfits to a handful of samples.</td>
+                <td>Higher → more queries fall back to coarser period-only / global averages, losing the localized signal that helps most.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="sub">All three were tuned empirically against out-of-fold MAE, not picked arbitrarily — the values shown throughout this deck are what won.</p>
+    </div>
+  </section>
+
+  <!-- 11. MODELS & METRICS -->
+  <section class="slide" id="s11">
+    <div class="eyebrow"><span class="num">09</span><span>Models &amp; Metrics</span><span class="rule"></span></div>
+    <h2>Five candidates, three metrics, one winner</h2>
+    <div class="body">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Model</th><th class="num">MAE (s)</th><th class="num">RMSE (s)</th><th class="num">MAPE (%)</th></tr></thead>
+          <tbody>
+            <tr class="win"><td>Random Forest</td><td class="num mono">495.1</td><td class="num mono">1128.4</td><td class="num mono">58.5</td></tr>
+            <tr><td>XGBoost</td><td class="num mono">523.0</td><td class="num mono">1202.3</td><td class="num mono">62.0</td></tr>
+            <tr><td>Baseline — calibrated (× median slowdown)</td><td class="num mono">543.4</td><td class="num mono">1207.4</td><td class="num mono">69.8</td></tr>
+            <tr><td>Baseline — naive (OSRM free-flow)</td><td class="num mono">740.9</td><td class="num mono">1541.0</td><td class="num mono">62.0</td></tr>
+            <tr><td>Ridge Linear Regression</td><td class="num mono">1759.2</td><td class="num mono">37130.4</td><td class="num mono">97.5</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <h4>Metrics — why these three</h4>
+          <ul class="list">
+            <li><b class="mono" style="color:var(--ink);">MAE</b> — average error in seconds, easy to communicate ("off by ~8 minutes").</li>
+            <li><b class="mono" style="color:var(--ink);">RMSE</b> — penalizes big misses harder; exposes whether a model is occasionally wildly wrong.</li>
+            <li><b class="mono" style="color:var(--ink);">MAPE</b> — relative error, comparable across short and long trips.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Why Ridge fails, why LightGBM is missing</h4>
+          <p><span class="tag bad">Ridge</span> destabilizes: one-hot encoding 85 OD zone-pair levels for a modest number of trips is a high-dimensional sparse setup that blows up once exponentiated out of log-space.</p>
+          <p style="margin-top:.5rem;"><span class="tag bad">LightGBM</span> crashed with a native access-violation on this Windows/Python 3.12 environment — an environment DLL conflict, not a data or modeling issue. Dropped from the comparison, documented as a known limitation.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12. PROBLEMS FACED -->
+  <section class="slide" id="s12">
+    <div class="eyebrow"><span class="num">10</span><span>Problems Faced</span><span class="rule"></span></div>
+    <h2>What actually went wrong along the way</h2>
+    <div class="body">
+      <div class="grid-2">
+        <div class="card">
+          <h4>Data &amp; signal</h4>
+          <ul class="list">
+            <li>Started with only 2 GPX files — solved by systematically downloading the full public Dhaka trace archive (89 traces, 270 API pages).</li>
+            <li>GPS glitches and OSRM road-snap errors produced impossible speeds — filtered with explicit QC thresholds.</li>
+            <li>K-Means zones left real gaps in city coverage — replaced with a fixed grid (Slide 8).</li>
+            <li>No offline calendar for lunar Islamic holidays (Eid, Ashura, …) — only fixed-date holidays are flagged; known limitation.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Modeling &amp; environment</h4>
+          <ul class="list">
+            <li>A naive random split leaked correlated sub-trajectories between train/val — fixed with grouped CV by trip_id.</li>
+            <li>Historical features frozen from one static split leaked fold information — fixed by recomputing them per fold.</li>
+            <li>LightGBM crashed natively on this machine — dropped, documented as environment-specific.</li>
+            <li>8 GB RAM host + Docker OSRM containers caused intermittent out-of-memory failures — mitigated by stopping unused containers during training.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13. INFERENCE & DEPLOYMENT -->
+  <section class="slide" id="s13">
+    <div class="eyebrow"><span class="num">11</span><span>Inference &amp; Deployment</span><span class="rule"></span></div>
+    <h2>Predicting a brand-new src/dst pair</h2>
+    <div class="body grid-2">
+      <div class="card">
+        <h4>The inference pipeline</h4>
+        <ul class="list">
+          <li>Raw (src, dst, time) query comes in — no history needed for this exact pair.</li>
+          <li>Compute haversine, bearing, live OSRM route; assign both points to a grid zone (always succeeds — the grid covers the whole city).</li>
+          <li>Look up historical speed via the 3-tier fallback; encode time-of-day and calendar features.</li>
+          <li>Feed the row to the bundled XGBoost and Random Forest models — both packaged with the zone grid, lookup tables, and feature schema in one <span class="mono">inference_bundle.joblib</span> file for portability.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Real-world validation</h4>
+        <p>Tested against a genuine 135-leg shuttle route sheet (multi-stop pickup routes), predicting each leg's travel time chained leg-by-leg from its actual departure time.</p>
+        <div class="stat-row" style="margin-top:.8rem;">
+          <div class="stat"><div class="v">131/135</div><div class="k">legs predicted (4 missing coordinates in source data)</div></div>
+          <div class="stat"><div class="v">0</div><div class="k">unseen OD zone-pairs, thanks to the fixed grid</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 14. SUMMARY -->
+  <section class="slide" id="s14">
+    <div class="eyebrow"><span class="num">12</span><span>Summary</span><span class="rule"></span></div>
+    <h2>Where this lands, and what's next</h2>
+    <div class="body">
+      <div class="grid-2">
+        <div class="card">
+          <h4>Result</h4>
+          <p><b style="color:var(--ink);">Random Forest</b>, trained on the fixed-grid feature set with per-fold historical speed lookups, is the deployed model — <b class="mono" style="color:var(--accent);">MAE 495s (~8.3 min)</b>, beating XGBoost, both calibrated and naive baselines, and Ridge regression, under leakage-safe grouped cross-validation.</p>
+        </div>
+        <div class="card">
+          <h4>Known limitations &amp; future work</h4>
+          <ul class="list">
+            <li>Single city (Dhaka only), ~300 trips — sparse zone-pairs still fall back to coarser averages.</li>
+            <li>No lunar holiday calendar; historical speed is static, not live traffic.</li>
+            <li>Next: more traces per sparse zone-pair, a live traffic feed, road-type/weather features.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card" style="text-align:center;padding:2rem;">
+        <h4 style="font-size:1.4rem;">Thank you</h4>
+        <p class="mono">Questions welcome.</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div id="navbar"><div class="prog" id="prog"></div></div>
+<div class="navctl">
+  <button id="prev" aria-label="Previous slide">‹</button>
+  <span class="counter" id="counter">01 / 14</span>
+  <button id="next" aria-label="Next slide">›</button>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const total = slides.length;
+  let i = 0;
+  const counter = document.getElementById('counter');
+  const prog = document.getElementById('prog');
+
+  function show(idx){
+    idx = Math.max(0, Math.min(total - 1, idx));
+    slides[i].classList.remove('active');
+    i = idx;
+    slides[i].classList.add('active');
+    counter.textContent = String(i+1).padStart(2,'0') + ' / ' + total;
+    prog.style.width = ((i+1)/total*100) + '%';
+  }
+  document.getElementById('next').addEventListener('click', () => show(i+1));
+  document.getElementById('prev').addEventListener('click', () => show(i-1));
+  window.addEventListener('keydown', (e) => {
+    if(['ArrowRight','PageDown',' '].includes(e.key)){ e.preventDefault(); show(i+1); }
+    else if(['ArrowLeft','PageUp'].includes(e.key)){ e.preventDefault(); show(i-1); }
+    else if(e.key === 'Home'){ show(0); }
+    else if(e.key === 'End'){ show(total-1); }
+  });
+  show(0);
+</script>
+
+</body>
+</html>
