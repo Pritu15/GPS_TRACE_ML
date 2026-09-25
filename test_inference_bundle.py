@@ -116,14 +116,16 @@ def build_feature_row(src_lat, src_lon, dst_lat, dst_lon, query_time, b):
     lvl1, lvl2, lvl3 = b["lvl1"], b["lvl2"], b["lvl3"]
     key1 = (od_zone_pair_id, bucket)
     od_pair_seen = od_zone_pair_id in lvl2.index
-    if key1 in lvl1.index and lvl1.loc[key1, "count"] >= b["min_support"]:
-        historical_avg_speed_kmh, level = lvl1.loc[key1, "mean"], "od_pair+period"
-    elif od_pair_seen and lvl2.loc[od_zone_pair_id, "count"] >= b["min_support"]:
-        historical_avg_speed_kmh, level = lvl2.loc[od_zone_pair_id, "mean"], "od_pair_only"
-    elif bucket in lvl3.index and lvl3.loc[bucket, "count"] >= b["min_support"]:
-        historical_avg_speed_kmh, level = lvl3.loc[bucket, "mean"], "period_only"
+    if key1 in lvl1.index and lvl1.loc[key1, "n_trips"] >= b["min_support"]:
+        historical_avg_speed_kmh, level = lvl1.loc[key1, "speed"], "od_pair+period"
+    elif od_pair_seen and lvl2.loc[od_zone_pair_id, "n_trips"] >= b["min_support"]:
+        supported = bucket in lvl3.index and lvl3.loc[bucket, "n_trips"] >= b["min_support"]
+        factor = lvl3.loc[bucket, "speed"] / b["global_speed"] if supported else 1.0
+        historical_avg_speed_kmh, level = lvl2.loc[od_zone_pair_id, "speed"] * factor, "od_pair_only"
+    elif bucket in lvl3.index and lvl3.loc[bucket, "n_trips"] >= b["min_support"]:
+        historical_avg_speed_kmh, level = lvl3.loc[bucket, "speed"], "period_only"
     else:
-        historical_avg_speed_kmh, level = b["global_mean"], "global_fallback"
+        historical_avg_speed_kmh, level = b["global_speed"], "global_fallback"
 
     row = {
         "src_zone_id": src_zone_id, "dst_zone_id": dst_zone_id, "od_zone_pair_id": od_zone_pair_id,
