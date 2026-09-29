@@ -602,6 +602,114 @@
     </div>
   </section>
 
+  <!-- 12c. MODEL FIXES: DIAGNOSIS -->
+  <section class="slide" id="s12c">
+    <div class="eyebrow"><span class="num">10</span><span>Problems Faced · Model Fixes</span><span class="rule"></span></div>
+    <h2>Why a 19 km trip was predicted at 2½ hours</h2>
+    <div class="body">
+      <div class="grid-2 rev">
+        <div class="card">
+          <h4>The symptom</h4>
+          <p>Gazipur → Tejgaon (19.2 km by road) at 6:00 AM on a Wednesday.</p>
+          <div class="stat-row" style="margin-top:.8rem;">
+            <div class="stat"><div class="v" style="color:var(--bad)">147–162</div><div class="k">minutes predicted (XGBoost / RF)</div></div>
+            <div class="stat"><div class="v" style="color:var(--teal)">26–45</div><div class="k">minutes shown by Google Maps</div></div>
+          </div>
+          <h4 style="margin-top:1.1rem;">Tracing it back</h4>
+          <p>The model leaned on its historical-speed feature for this corridor at this hour: <b class="mono" style="color:var(--ink);">8.4 km/h</b>, supposedly backed by 14 samples. Those 14 rows came from just <b style="color:var(--ink);">2 trips</b>, and 10 of them were one GPS trace moving at <b style="color:var(--ink);">2.6 km/h</b>: someone walking.</p>
+        </div>
+        <div class="card">
+          <h4>Four fixes to the training pipeline</h4>
+          <ul class="list">
+            <li><span><span class="tag">Data</span> <b>Walking and rickshaw traces removed.</b> A trip whose 90th-percentile point speed stays under 12 km/h never moved like a motor vehicle. 53 of 311 trips dropped. An average-speed cutoff was avoided because cars in Dhaka jams can genuinely average 5–7 km/h.</span></li>
+            <li><span><span class="tag">Feature</span> <b>Support counted in trips, not rows.</b> A historical-speed cell now needs ≥3 <i>distinct trips</i> and uses the median. Multi-scale sampling had let one odd trip pass the threshold alone.</span></li>
+            <li><span><span class="tag bad">Bug</span> <b>UTC timestamps converted to Dhaka time.</b> GPX times are UTC; every time feature was six hours off (next slide).</span></li>
+            <li><span><span class="tag">Fallback</span> <b>Time-scaled corridor fallback.</b> When a corridor has no trips at the queried hour, its all-day speed is scaled by how fast that hour is city-wide, instead of silently reusing midday traffic.</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12d. MODEL FIXES: TIMEZONE -->
+  <section class="slide" id="s12d">
+    <div class="eyebrow"><span class="num">10</span><span>Problems Faced · Model Fixes</span><span class="rule"></span></div>
+    <h2>The clock was six hours off</h2>
+    <div class="body">
+      <div class="grid-2">
+        <div class="card">
+          <h4>Median real speed by time-of-day bucket (km/h)</h4>
+          <div class="bars">
+            <div class="bar-row"><span class="lbl">Night <span class="mono">00–06</span></span><div class="track"><div class="fill muted" style="width:70.3%"></div></div><span class="val">22.5</span></div>
+            <div class="bar-row"><span class="lbl">&nbsp;</span><div class="track"><div class="fill accent" style="width:74.4%"></div></div><span class="val">23.8</span></div>
+            <div class="bar-row"><span class="lbl">Morning <span class="mono">06–08</span></span><div class="track"><div class="fill muted" style="width:42.5%"></div></div><span class="val">13.6</span></div>
+            <div class="bar-row"><span class="lbl">&nbsp;</span><div class="track"><div class="fill accent" style="width:83.4%"></div></div><span class="val">26.7</span></div>
+            <div class="bar-row"><span class="lbl">Morning rush <span class="mono">08–10</span></span><div class="track"><div class="fill muted" style="width:49.1%"></div></div><span class="val">15.7</span></div>
+            <div class="bar-row"><span class="lbl">&nbsp;</span><div class="track"><div class="fill accent" style="width:81.3%"></div></div><span class="val">26.0</span></div>
+            <div class="bar-row"><span class="lbl">Midday <span class="mono">10–17</span></span><div class="track"><div class="fill muted" style="width:46.9%"></div></div><span class="val">15.0</span></div>
+            <div class="bar-row"><span class="lbl">&nbsp;</span><div class="track"><div class="fill accent" style="width:47.2%"></div></div><span class="val">15.1</span></div>
+            <div class="bar-row"><span class="lbl">Evening rush <span class="mono">17–21</span></span><div class="track"><div class="fill muted" style="width:99.1%"></div></div><span class="val">31.7</span></div>
+            <div class="bar-row"><span class="lbl">&nbsp;</span><div class="track"><div class="fill accent" style="width:47.2%"></div></div><span class="val">15.1</span></div>
+            <div class="bar-row"><span class="lbl">Late evening <span class="mono">21–24</span></span><div class="track"><div class="fill muted" style="width:40.6%"></div></div><span class="val">13.0</span></div>
+            <div class="bar-row"><span class="lbl">&nbsp;</span><div class="track"><div class="fill accent" style="width:73.1%"></div></div><span class="val">23.4</span></div>
+          </div>
+          <div class="legend" style="margin-top:.9rem;">
+            <span><span class="swatch" style="background:var(--ink-muted);opacity:.55"></span>Before: hours read as UTC</span>
+            <span><span class="swatch" style="background:var(--accent)"></span>After: converted to Dhaka time (UTC+6)</span>
+          </div>
+        </div>
+        <div class="card">
+          <h4>How it showed up</h4>
+          <p>GPX timestamps end in <span class="mono">Z</span> (UTC). The pipeline computed hour, day of week and holiday flags straight from them, while inference queries arrive in Dhaka local time.</p>
+          <ul class="list" style="margin-top:.8rem;">
+            <li>"Evening rush" came out as the <b>fastest</b> bucket at 31.7 km/h. Those trips were really 23:00–03:00 local, when roads are empty.</li>
+            <li>A 6 AM query was matched against what was really <b>noon traffic</b>, so every early-morning prediction was far too slow.</li>
+            <li>After converting to <span class="mono">Asia/Dhaka</span>, the pattern matches the city: fast late at night and early morning, slowest midday and during the evening rush.</li>
+          </ul>
+          <p class="sub" style="margin-top:.8rem;">A one-line fix in feature engineering, but it touched every time-based feature the model uses.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12e. MODEL FIXES: RESULTS -->
+  <section class="slide" id="s12e">
+    <div class="eyebrow"><span class="num">10</span><span>Problems Faced · Model Fixes</span><span class="rule"></span></div>
+    <h2>Before vs after the fixes</h2>
+    <div class="body">
+      <div class="stat-row">
+        <div class="stat"><div class="v">162 → 45</div><div class="k">Random Forest minutes, Gazipur → Tejgaon at 6 AM (Google: 26–45)</div></div>
+        <div class="stat"><div class="v">147 → 58</div><div class="k">XGBoost minutes, same query</div></div>
+        <div class="stat"><div class="v">286 → 20</div><div class="k">legs predicted at ≥4× OSRM in the 522-leg shuttle divergence report (Random Forest)</div></div>
+      </div>
+      <div class="grid-2">
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Grouped 5-fold CV</th><th class="num">MAE before</th><th class="num">MAE after</th><th class="num">MAPE after</th></tr></thead>
+            <tbody>
+              <tr class="win"><td>Random Forest</td><td class="num mono">495.1s</td><td class="num mono">465.4s</td><td class="num mono">55.6%</td></tr>
+              <tr><td>XGBoost</td><td class="num mono">523.0s</td><td class="num mono">525.9s</td><td class="num mono">61.0%</td></tr>
+              <tr><td>Baseline: calibrated OSRM</td><td class="num mono">543.4s</td><td class="num mono">505.4s</td><td class="num mono">64.6%</td></tr>
+              <tr><td>Training data</td><td class="num mono">8,765 rows</td><td class="num mono">7,926 rows</td><td class="num mono">255 trips</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>522 divergent shuttle legs</th><th class="num">Old model</th><th class="num">New XGB</th><th class="num">New RF</th></tr></thead>
+            <tbody>
+              <tr><td>Total predicted minutes</td><td class="num mono">14,452</td><td class="num mono">9,010</td><td class="num mono">7,595</td></tr>
+              <tr><td>Median ratio vs OSRM</td><td class="num mono">4.10</td><td class="num mono">2.63</td><td class="num mono">2.21</td></tr>
+              <tr><td>Legs at ≥4× OSRM</td><td class="num mono">286</td><td class="num mono">66</td><td class="num mono">20</td></tr>
+              <tr><td>Legs at ≥2× OSRM</td><td class="num mono">522</td><td class="num mono">391</td><td class="num mono">337</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="sub">"Before" and "after" CV scores are on slightly different datasets, because walking trips were removed. The remaining ≈2× ratio to OSRM is expected: in the real GPS trips, actual time is typically 2.6× OSRM's no-traffic estimate.</p>
+    </div>
+  </section>
+
   <!-- 13. INFERENCE & DEPLOYMENT -->
   <section class="slide" id="s13">
     <div class="eyebrow"><span class="num">11</span><span>Inference &amp; Deployment</span><span class="rule"></span></div>
